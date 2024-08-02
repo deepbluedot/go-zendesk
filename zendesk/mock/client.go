@@ -12,7 +12,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	zendesk "github.com/nukosuke/go-zendesk/zendesk"
+	zendesk "github.com/deepbluedot/go-zendesk/zendesk"
 	gomock "go.uber.org/mock/gomock"
 )
 

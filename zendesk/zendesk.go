@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/go-querystring/query"
 )
@@ -122,31 +125,44 @@ func (z *Client) SetCredential(cred Credential) {
 
 // get get JSON data from API and returns its body as []bytes
 func (z *Client) get(ctx context.Context, path string) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodGet, z.baseURL.String()+path, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req = z.prepareRequest(ctx, req)
-
-	resp, err := z.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, Error{
-			body: body,
-			resp: resp,
+	for {
+		req, err := http.NewRequest(http.MethodGet, z.baseURL.String()+path, nil)
+		if err != nil {
+			return nil, err
 		}
+
+		req = z.prepareRequest(ctx, req)
+
+		resp, err := z.httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		switch resp.StatusCode {
+		case http.StatusOK:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			return body, nil
+		case http.StatusTooManyRequests:
+			if val, ok := resp.Header["Retry-After"]; ok {
+				if len(val) > 0 {
+					reset, err := strconv.ParseInt(val[0], 10, 64)
+					if nil != err {
+						return nil, err
+					}
+					if reset > 0 {
+						time.Sleep(time.Second * time.Duration(reset))
+					}
+				}
+			}
+		default:
+			return nil, Error{body: nil, resp: resp}
+		}
+
 	}
-	return body, nil
 }
 
 // post send data to API and returns response body as []bytes
